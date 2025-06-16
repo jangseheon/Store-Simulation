@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Store Simulation</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { width:100%; height:100%; overflow:hidden; font-family:Inter, sans-serif; }
+        .container { width:90vw; max-width:1200px; height:85vh; margin:20px auto;
+            display:grid; grid-template-columns:65% 17.5% 17.5%; grid-template-rows:50px 1fr 1fr 60px;
+        }
+        .header {
+            grid-column: 1 / 4;
+            grid-row: 1;
+            display: grid;
+            grid-template-columns: 20% 45% 17.5% 17.5%;
+        }
+        .header div { border:2px solid #000; display:flex; align-items:center; justify-content:center;
+            font:600 24px Inter, sans-serif;
+        }
+        .content-left { grid-column:1; grid-row:2/4; border:2px solid #000; overflow:auto; padding:10px; }
+        .content-cooking, .content-complete { border:2px solid #000; overflow:auto; padding:10px;
+            display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-content:start;
+        }
+        .content-cooking { grid-column:2; grid-row:2; }
+        .content-complete { grid-column:3; grid-row:2; }
+        .order-number { width:80px; height:80px; display:flex; align-items:center; justify-content:center;
+            background:#f0f0f0; border-radius:8px; font-size:36px; font-weight:bold; color:#333;
+        }
+        .message { grid-column:2/4; grid-row:3; border:2px solid #000; display:flex;
+            align-items:center; justify-content:center; font:600 48px Inter, sans-serif;
+        }
+        .footer-left, .footer-right { display:flex; align-items:center; justify-content:center; gap:20px;
+            border:2px solid #000;
+        }
+        .footer-left { grid-column:1; grid-row:4; }
+        .footer-right { grid-column:2/4; grid-row:4; }
+        button { background:#D9D9D9; border:none; font:600 18px Inter, sans-serif;
+            padding:0.5em 1em; cursor:pointer; border-radius:4px;
+        }
+        .cart-sidebar { position:fixed; top:0; right:0; width:300px; height:100%; background:#fff;
+            box-shadow:-2px 0 5px rgba(0,0,0,0.1); padding:20px; overflow-y:auto;
+            transform:translateX(100%); transition:transform .3s ease; z-index:200;
+        }
+        .cart-sidebar.open { transform:translateX(0); }
+        .cart-sidebar h3 { margin-top:0; font-size:1.5em; text-align:center; }
+        .cart-item { display:flex; justify-content:space-between; margin-bottom:10px; }
+        #openCartBtn { position:fixed; top:20px; right:20px; padding:8px 12px;
+            background:#28a745; color:#fff; border-radius:4px; font-size:14px; z-index:150;
+        }
+        #checkoutBtn, #closeCartBtn { padding:10px; border:none; cursor:pointer;
+            border-radius:4px; width:100%; font-size:16px;
+        }
+        #checkoutBtn { background:#007bff; color:#fff; margin-top:10px; }
+        #closeCartBtn { background:#dc3545; color:#fff; margin-top:5px; }
+        .modal { display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+            background:rgba(0,0,0,0.5); align-items:center; justify-content:center;
+            z-index:250;
+        }
+        .modal.open { display:flex; }
+        .modal-content { background:#fff; padding:20px; width:300px;
+            border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.3); position:relative;
+        }
+        .modal-content h2 { margin-top:0; font-size:1.5em; }
+        .modal-content label { display:block; margin:12px 0 4px; font-weight:500; }
+        .modal-content input, .modal-content select { width:100%; padding:6px 8px;
+            box-sizing:border-box; margin-bottom:8px;
+        }
+        .modal-content .btn-group { text-align:right; margin-top:16px; }
+        .modal-content .btn-group button { margin-left:8px; }
+        #editMenuBtn { position:absolute; top:10px; right:10px; padding:4px 8px; font-size:14px; }
+        .menu-item button {padding: 0.5em 1em;font-size: 1rem;cursor: pointer;}
+        .menu-item button:first-child {text-align: left;}
+    </style>
+
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            총 판매금액: <span id="totalSalesValue" th:text="${totalSales}">0</span>원
+        </div>
+        <div>주문하기</div>
+        <div>조리중</div>
+        <div>조리완료</div>
+    </div>
+    <div class="content-left" id="orderArea"></div>
+    <div class="content-cooking" id="cookingArea"></div>
+    <div class="content-complete" id="completeArea"></div>
+    <div class="message"> </div>
+    <div class="footer-left">
+        <button id="btnAdd">메뉴 추가</button>
+        <button id="btnStatus">판매 현황</button>
+    </div>
+    <div class="footer-right">
+        <button id="btnReceive">음식 받기</button>
+    </div>
+</div>
+<button id="openCartBtn">🛒 장바구니 보기</button>
+<a th:href="@{/logout}"
+   id="logoutBtn"
+   style="position:fixed; top:60px; right:20px; padding:8px 12px;
+          background:#dc3545; color:#fff; border-radius:4px; font-size:14px;
+          text-decoration:none; text-align:center; z-index:150;">
+    로그아웃
+</a>
+
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <h2>메뉴 추가</h2>
+        <form id="addMenuForm">
+            <label>이름<input type="text" name="name" required/></label>
+            <label>가격(원)<input type="number" name="price" min="1" required/></label>
+            <label>조리 시간(초)<input type="number" name="makeTime" min="1" required/></label>
+            <div class="btn-group">
+                <button type="button" id="cancelAdd">취소</button>
+                <button type="submit">추가</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 수량 선택 모달 -->
+<div id="qtyModal" class="modal">
+    <div class="modal-content">
+        <button id="editMenuBtn">메뉴 수정</button>
+        <h2>수량 선택</h2>
+        <form id="qtyForm">
+            <input type="hidden" id="qtyMenuId">
+            <label>수량<input type="number" id="qtyInput" min="1" value="1" required/></label>
+            <div class="btn-group">
+                <button type="button" id="cancelQty">취소</button>
+                <button type="submit">담기</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 결제 수단 모달 -->
+<div id="paymentModal" class="modal">
+    <div class="modal-content">
+        <h2>결제 수단 선택</h2>
+        <form id="paymentForm">
+            <label><input type="radio" name="paymentMethod" value="CARD" checked/> 카드</label>
+            <label><input type="radio" name="paymentMethod" value="CASH"/> 현금</label>
+            <div class="btn-group">
+                <button type="button" id="cancelPayment">취소</button>
+                <button type="submit">확인</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 메뉴 수정 모달 -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <h2>메뉴 수정</h2>
+        <form id="editForm">
+            <input type="hidden" id="editMenuId">
+            <label>이름<input type="text" id="editName" required/></label>
+            <label>가격(원)<input type="number" id="editPrice" min="1" required/></label>
+            <label>조리 시간(초)<input type="number" id="editMakeTime" min="1" required/></label>
+            <div class="btn-group">
+                <button type="button" id="cancelEdit">취소</button>
+                <button type="button" id = "saveEditBtn">저장</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 장바구니 사이드바 -->
+<div id="cartSidebar" class="cart-sidebar">
+    <h3>🛒 장바구니</h3>
+    <ul id="cartItems" style="list-style:none;padding:0;"></ul>
+    <div id="cartTotal" style="margin-top:20px;font-weight:bold;">총합: 0원</div>
+    <button id="checkoutBtn">주문하기</button>
+    <button id="closeCartBtn">닫기</button>
+    <button onclick="clearCart()">장바구니 초기화</button>
+</div>
+
+<div id="salesModal" class="modal">
+    <div class="modal-content">
+        <h2>판매 현황</h2>
+        <table id="salesTable" style="width:100%; border-collapse:collapse;">
+            <thead>
+            <tr>
+                <th style="border:1px solid #ddd; padding:8px;">메뉴</th>
+                <th style="border:1px solid #ddd; padding:8px;">판매 수량</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <div class="btn-group" style="text-align:right; margin-top:16px;">
+            <button id="closeSalesBtn">닫기</button>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    const cart = [];
+    const ordersInProgress = [];
+    const completedOrders = [];
+
+    function loadMenus() {
+        fetch('/api/menus')
+            .then(res => res.json())
+            .then(menus => {
+                const area = document.getElementById('orderArea');
+                area.innerHTML = '';
+
+                menus.forEach(menu => {
+                    const box = document.createElement('div');
+                    box.className = 'menu-item';
+                    box.style.display = 'flex';
+                    box.style.alignItems = 'center';
+                    box.style.justifyContent = 'space-between';
+                    box.style.margin = '8px 0';
+
+                    const orderBtn = document.createElement('button');
+                    orderBtn.textContent = `${menu.name} (${menu.price}원)`;
+                    orderBtn.style.flex = '1';
+                    orderBtn.dataset.id = menu.menuId;
+                    orderBtn.dataset.name = menu.name;
+                    orderBtn.dataset.price = menu.price;
+                    orderBtn.dataset.makeTime = menu.makeTime;
+                    orderBtn.onclick = () => openQtyModal(menu);
+
+                    const delBtn = document.createElement('button');
+                    delBtn.textContent = '🗑️';
+                    delBtn.style.marginLeft = '8px';
+                    delBtn.title = '메뉴 삭제';
+                    delBtn.onclick = async () => {
+                        if (!confirm(`"${menu.name}" 을(를) 삭제하시겠습니까?`)) return;
+                        const res = await fetch(`/api/menus/${menu.menuId}`, { method: 'DELETE' });
+                        if (res.ok) {
+                            loadMenus();
+                        } else {
+                            alert('삭제 실패했습니다.');
+                        }
+                    };
+
+                    box.append(orderBtn, delBtn);
+                    area.appendChild(box);
+                });
+            });
+    }
+
+    function toggleModal(id, open) {
+        document.getElementById(id).classList[open ? 'add' : 'remove']('open');
+    }
+
+    function openQtyModal(menu) {
+        document.getElementById('qtyMenuId').value = menu.menuId;
+        document.getElementById('qtyInput').value = 1;
+        document.getElementById('qtyModal').dataset.currentMenu = JSON.stringify(menu);
+
+        toggleModal('qtyModal', true);
+
+        const editBtn = document.getElementById('editMenuBtn');
+        editBtn.onclick = () => {
+            document.getElementById('editMenuId').value     = menu.menuId;
+            document.getElementById('editName').value       = menu.name;
+            document.getElementById('editPrice').value      = menu.price;
+            document.getElementById('editMakeTime').value   = menu.makeTime;
+            toggleModal('editModal', true);
+        };
+    }
+
+    document.getElementById('btnAdd').onclick = () => {
+        toggleModal('addModal', true);
+    };
+
+    document.getElementById('cancelAdd').onclick = () => {
+        toggleModal('addModal', false);
+    };
+
+    document.getElementById('addMenuForm').onsubmit = e => {
+        e.preventDefault();
+
+        const name     = e.target.name.value.trim();
+        const price    = +e.target.price.value;
+        const makeTime = +e.target.makeTime.value;
+
+        fetch('/api/menus', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, price, makeTime })
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('메뉴 추가에 실패했습니다');
+                return res.json();
+            })
+            .then(() => {
+                toggleModal('addModal', false);
+                loadMenus();
+            })
+            .catch(err => {
+                console.error(err);
+                alert(err.message);
+            });
+    };
+
+    document.getElementById('cancelQty').onclick = () => toggleModal('qtyModal', false);
+    document.getElementById('qtyForm').onsubmit = e => {
+        e.preventDefault();
+        const id = +document.getElementById('qtyMenuId').value;
+        const qty = +document.getElementById('qtyInput').value;
+        const btn = Array.from(document.querySelectorAll(`[data-id]`)).find(b => +b.dataset.id === id);
+        const name = btn.dataset.name;
+        const price = +btn.dataset.price;
+        const makeTime = +btn.dataset.makeTime;
+        const exist = cart.find(i => i.menuId === id);
+        if (exist) exist.quantity += qty;
+        else cart.push({ menuId: id, name, price, quantity: qty, makeTime });
+        renderCart();
+        toggleModal('qtyModal', false);
+    };
+
+    function renderCart() {
+        const ul = document.getElementById('cartItems'); ul.innerHTML = '';
+        let total = 0;
+        cart.forEach(item => {
+            total += item.price * item.quantity;
+            const li = document.createElement('li'); li.className = 'cart-item';
+            li.innerHTML = `<span>${item.name} x ${item.quantity}</span><span>${item.price * item.quantity}원</span>`;
+            ul.appendChild(li);
+        });
+        document.getElementById('cartTotal').textContent = `총합: ${total}원`;
+    }
+
+    document.getElementById('checkoutBtn').onclick = () => {
+        if (!cart.length) return alert('장바구니가 비어 있습니다.');
+        toggleModal('paymentModal', true);
+    };
+    document.getElementById('cancelPayment').onclick = () => toggleModal('paymentModal', false);
+
+    document.getElementById('paymentForm').onsubmit = async e => {
+        e.preventDefault();
+        const method = document.querySelector('input[name="paymentMethod"]:checked').value;
+        const cookingTime = cart.reduce((sum, i) => sum + i.makeTime * i.quantity, 0);
+
+        try {
+            const resOrder = await fetch('/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    items: cart.map(i => ({ menuId: i.menuId, quantity: i.quantity })),
+                    paymentMethod: method
+                })
+            });
+            if (!resOrder.ok) throw new Error('주문 실패');
+            const orderId = await resOrder.json();
+
+            ordersInProgress.push({ orderId, cookingTime });
+            renderOrders();
+
+            setTimeout(() => {
+                const idx = ordersInProgress.findIndex(o => o.orderId === orderId);
+                if (idx > -1) {
+                    completedOrders.push(ordersInProgress[idx]);
+                    ordersInProgress.splice(idx, 1);
+                    renderOrders();
+                }
+            }, cookingTime * 1000);
+
+            cart.length = 0;
+            renderCart();
+            toggleModal('cartSidebar', false);
+            alert(`주문 완료! 주문번호: ${orderId}`);
+
+            const resSales = await fetch('/api/orders/total-sales');
+            if (!resSales.ok) throw new Error('총판매금액 불러오기 실패');
+            const newTotal = await resSales.json();
+            document.getElementById('totalSalesValue').textContent = newTotal;
+
+        } catch (err) {
+            console.error(err);
+            alert(err.message);
+        } finally {
+            toggleModal('paymentModal', false);
+        }
+    };
+
+
+    function clearCart() {
+        fetch('/api/cart/clear', {
+            method: 'DELETE'
+        })
+            .then(response => {
+                if (response.ok) {
+                    alert("장바구니가 초기화되었습니다.");
+                    location.reload();
+                } else {
+                    alert("초기화 실패");
+                }
+            });
+    }
+
+    async function createOrder(payload) {
+        const res = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('주문 실패');
+
+        const totalRes = await fetch('/api/orders/total-sales');
+        const newTotal = await totalRes.json();
+
+        document.getElementById('totalSalesValue').textContent = newTotal;
+    }
+
+    function renderOrders() {
+        const cookingArea = document.getElementById('cookingArea');
+        const completeArea = document.getElementById('completeArea');
+        cookingArea.innerHTML = '';
+        completeArea.innerHTML = '';
+        ordersInProgress.forEach(o => {
+            const div = document.createElement('div');
+            div.className = 'order-number';
+            div.textContent = o.orderId;
+            cookingArea.appendChild(div);
+        });
+        completedOrders.forEach(o => {
+            const div = document.createElement('div');
+            div.className = 'order-number';
+            div.textContent = o.orderId;
+            completeArea.appendChild(div);
+        });
+        const msg = document.querySelector('.message');
+        if (completedOrders.length > 0) {
+            msg.textContent = '음식 나왔습니다';
+        } else {
+            msg.textContent = '';
+        }
+    }
+
+    document.getElementById('btnReceive').onclick = () => {
+        if (!completedOrders.length) return alert('받을 음식이 없습니다.');
+        completedOrders.length = 0;
+        renderOrders();
+        alert('모든 음식이 수령되었습니다.');
+    };
+
+    document.getElementById('openCartBtn').onclick = () => toggleModal('cartSidebar', true);
+    document.getElementById('closeCartBtn').onclick = () => toggleModal('cartSidebar', false);
+
+    document.getElementById('editMenuBtn').onclick = () => {
+        const menu = JSON.parse(document.getElementById('qtyModal').dataset.currentMenu);
+        document.getElementById('editMenuId').value = menu.menuId;
+        document.getElementById('editName').value = menu.name;
+        document.getElementById('editPrice').value = menu.price;
+        document.getElementById('editMakeTime').value = menu.makeTime;
+        toggleModal('editModal', true);
+    };
+
+    loadMenus();
+
+    document.getElementById('cancelEdit').onclick = () => toggleModal('editModal', false);
+    document.getElementById('saveEditBtn').onclick = () => {
+        const id = +document.getElementById('editMenuId').value;
+        const name = document.getElementById('editName').value;
+        const price = +document.getElementById('editPrice').value;
+        const makeTime = +document.getElementById('editMakeTime').value;
+
+        fetch(`/api/menus/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ menuId: id, name, price, makeTime })
+        })
+            .then(res => {
+                if (!res.ok) throw new Error('메뉴 수정에 실패했습니다');
+                return res;
+            })
+            .then(() => {
+                alert(`메뉴(${id})가 성공적으로 수정되었습니다.`);
+                toggleModal('editModal', false);
+                loadMenus();
+            })
+            .catch(err => {
+                console.error(err);
+                alert(err.message);
+            });
+    };
+
+    document.getElementById('btnStatus').onclick = async () => {
+        try {
+            const res = await fetch('/api/menus/sales-summary');
+            if (!res.ok) throw new Error('판매 현황 로드 실패');
+            const list = await res.json();
+
+            const tbody = document.querySelector('#salesTable tbody');
+            tbody.innerHTML = '';
+
+            list.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+        <td style="border:1px solid #ddd; padding:8px;">${item.name}</td>
+        <td style="border:1px solid #ddd; padding:8px; text-align:right;">${item.quantity}</td>
+      `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('salesModal').classList.add('open');
+        } catch (err) {
+            console.error(err);
+            alert(err.message);
+        }
+    };
+
+    document.getElementById('closeSalesBtn').onclick = () => {
+        document.getElementById('salesModal').classList.remove('open');
+    };
+
+</script>
+</body>
+</html>

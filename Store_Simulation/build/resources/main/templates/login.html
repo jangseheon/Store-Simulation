@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Store Simulation - 로그인</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: Inter, sans-serif;
+            background: #fafafa;
+        }
+
+        .logo {
+            width: 400px;
+            margin-bottom: 40px;
+        }
+
+        .login-form {
+            display: flex;
+            align-items: flex-end;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .fields {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 400px;
+        }
+
+        .fields label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .fields input {
+            width: 240px;
+            padding: 12px 8px;
+            font-size: 1rem;
+            line-height: 1.2;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .btn-login {
+            width: 90px;
+            height: 110px;
+            background: #d9d9d9;
+            border: none;
+            font-size: 1.2rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .btn-register {
+            background: #ddd;
+            border: none;
+            padding: 6px 12px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-top: 8px;
+        }
+
+        /* Modal 스타일 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 250;
+        }
+        .modal.open {
+            display: flex;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 20px;
+            width: 320px;
+            height: 350px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .modal-content h2 {
+            margin-top: 0;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+        .modal-content input[type="text"],
+        .modal-content input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .modal-content label.checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+        .btn-group {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .btn-group button {
+            padding: 6px 12px;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            background: #d9d9d9;
+            font-size: 1rem;
+        }
+    </style>
+
+    <script th:inline="javascript">
+        /*<![CDATA[*/
+        if ([[${param.error}]] == 'true') {
+            alert('로그인에 실패했습니다.\n아이디와 비밀번호를 확인해주세요.');
+        }
+        if ([[${param.logout}]] == 'true') {
+            alert('로그아웃되었습니다.');
+        }
+        /*]]>*/
+    </script>
+
+</head>
+<body>
+
+<img class="logo" th:src="@{/images/Store_Simulation.png}" alt="STORE SIMULATION Logo"/>
+
+<form th:action="@{/login}" method="post">
+    <div class="login-form">
+        <div class="fields">
+            <label>
+                ID
+                <input name="username" type="text" placeholder="아이디 입력" required/>
+            </label>
+            <label>
+                비밀번호
+                <input name="password" type="password" placeholder="비밀번호 입력" required/>
+            </label>
+        </div>
+        <button type="submit" class="btn-login">Login</button>
+    </div>
+</form>
+
+<button id="showRegister" class="btn-register">회원가입</button>
+
+<!-- 회원가입 모달 -->
+<div id="registerModal" class="modal">
+    <div class="modal-content">
+        <h2>회원가입</h2>
+        <input id="regId" type = "text" placeholder="아이디" />
+        <input id="regName" type = "text" placeholder="이름" />
+        <input id="regPassword" type="password" placeholder="비밀번호" />
+        <input id="regConfirm" type="password" placeholder="비밀번호 확인" />
+        <label class="checkbox">
+            <input type="checkbox" id="regIsManager" /> 관리자 계정으로 등록
+        </label>
+        <p id="registerError" style="color:red;"></p>
+        <div class="btn-group">
+            <button id="cancelRegister" type="button">취소</button>
+            <button id="submitRegister" type="button">가입하기</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const regModal = document.getElementById('registerModal');
+    document.getElementById('showRegister').onclick = () => regModal.classList.add('open');
+    document.getElementById('cancelRegister').onclick = () => regModal.classList.remove('open');
+
+    document.getElementById('submitRegister').onclick = async () => {
+        const dto = {
+            id: document.getElementById('regId').value.trim(),
+            name: document.getElementById('regName').value.trim(),
+            password: document.getElementById('regPassword').value,
+            confirmPassword: document.getElementById('regConfirm').value,
+            isManager: document.getElementById('regIsManager').checked
+        };
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(dto)
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            document.getElementById('registerError').textContent = data.error || Object.values(data).join(' ');
+        } else {
+            alert('회원가입 성공! 로그인 해주세요.');
+            regModal.classList.remove('open');
+        }
+    };
+</script>
+
+</body>
+</html>
